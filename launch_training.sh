@@ -1,7 +1,7 @@
 #!/bin/bash
 export GLUE_DIR=glue_data
 export TASK_NAME=MRPC
-export OUTPUT_DIR=tmp/${TASK_NAME}_label_embedding
+export OUTPUT_DIR=./${TASK_NAME}_label_embedding
 # export log_file=tmp/train_log_${TASK_NAME}.txt
 
 python ./scripts/run_glue_label.py \
