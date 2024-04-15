@@ -37,7 +37,6 @@ from transformers import (
     AlbertTokenizer,
     BertConfig,
     BertForSequenceClassification,
-    BertForSequenceClassification_label,
     BertTokenizer,
     DistilBertConfig,
     DistilBertForSequenceClassification,
@@ -87,7 +86,7 @@ ALL_MODELS = sum(
 )
 
 MODEL_CLASSES = {
-    "bert": (BertConfig, BertForSequenceClassification_label, BertTokenizer),
+    "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
     "xlnet": (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
     "xlm": (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     "roberta": (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
@@ -211,44 +210,8 @@ def train(args, train_dataset, model, tokenizer):
                 inputs["token_type_ids"] = (
                     batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
                 )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
-
-            # batch_size, seq_len = inputs["input_ids"].size()
-            # inputs["input_ids"] = torch.cat([inputs["input_ids"][:,:2], torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)+tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-            #                                     , inputs["input_ids"][:,2:]], dim=1)
-            # inputs["attention_mask"] = torch.cat([inputs["attention_mask"][:,:2], torch.zeros(batch_size, 2, dtype=torch.long, device=args.device),
-            #                                       inputs["attention_mask"][:, 2:]], dim=1)
-            # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-            # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-            # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-            # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-            # position_ids = torch.cat([position_ids[:, :2], label_position_ids, position_ids[:, 2:]], dim=1)
-            # inputs["position_ids"] = position_ids
-            # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-            # token_type_ids = torch.cat([inputs["token_type_ids"][:, :2], label_type_ids, inputs["token_type_ids"][:, 2:]], dim=1)
-            # inputs["token_type_ids"] = token_type_ids
-
-            # batch_size, seq_len = inputs["input_ids"].size()
-            # inputs["input_ids"] = torch.cat([inputs["input_ids"][:, [0]], inputs["input_ids"][:, 1:],
-            #                                  torch.zeros(batch_size, 2, dtype=torch.long,
-            #                                              device=args.device) + tokenizer.convert_tokens_to_ids(
-            #                                      tokenizer.pad_token)], dim=1)
-            # inputs["attention_mask"] = torch.cat(
-            #     [inputs["attention_mask"][:, [0]], inputs["attention_mask"][:, 1:],
-            #      torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)], dim=1)
-            # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-            # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-            # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-            # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-            # position_ids = torch.cat([position_ids[:, [0]], position_ids[:, 1:], label_position_ids], dim=1)
-            # inputs["position_ids"] = position_ids
-            # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-            # token_type_ids = torch.cat(
-            #     [inputs["token_type_ids"][:, [0]], inputs["token_type_ids"][:, 1:], label_type_ids], dim=1)
-            # inputs["token_type_ids"] = token_type_ids
-
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
-            loss_seq, loss_labels = outputs[1], outputs[2]
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -287,8 +250,6 @@ def train(args, train_dataset, model, tokenizer):
                     learning_rate_scalar = scheduler.get_lr()[0]
                     logs["learning_rate"] = learning_rate_scalar
                     logs["loss"] = loss_scalar
-                    logs["loss_seq"] = loss_seq.item()
-                    logs["loss_labels"] = loss_labels.item()
                     logging_loss = tr_loss
 
                     for key, value in logs.items():
@@ -365,49 +326,8 @@ def evaluate(args, model, tokenizer, prefix=""):
                     inputs["token_type_ids"] = (
                         batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
                     )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
-
-                # batch_size, seq_len = inputs["input_ids"].size()
-                # inputs["input_ids"] = torch.cat([inputs["input_ids"][:, :2],
-                #                                  torch.zeros(batch_size, 2, dtype=torch.long,
-                #                                              device=args.device) + tokenizer.convert_tokens_to_ids(
-                #                                      tokenizer.pad_token)
-                #                                     , inputs["input_ids"][:, 2:]], dim=1)
-                # inputs["attention_mask"] = torch.cat(
-                #     [inputs["attention_mask"][:, :2], torch.zeros(batch_size, 2, dtype=torch.long, device=args.device),
-                #      inputs["attention_mask"][:, 2:]], dim=1)
-                # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-                # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-                # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-                # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-                # position_ids = torch.cat([position_ids[:, :2], label_position_ids, position_ids[:, 2:]], dim=1)
-                # inputs["position_ids"] = position_ids
-                # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-                # token_type_ids = torch.cat(
-                #     [inputs["token_type_ids"][:, :2], label_type_ids, inputs["token_type_ids"][:, 2:]], dim=1)
-                # inputs["token_type_ids"] = token_type_ids
-
-                # batch_size, seq_len = inputs["input_ids"].size()
-                # inputs["input_ids"] = torch.cat([inputs["input_ids"][:, [0]], inputs["input_ids"][:, 1:],
-                #                                  torch.zeros(batch_size, 2, dtype=torch.long,
-                #                                              device=args.device) + tokenizer.convert_tokens_to_ids(
-                #                                      tokenizer.pad_token)], dim=1)
-                # inputs["attention_mask"] = torch.cat(
-                #     [inputs["attention_mask"][:, [0]], inputs["attention_mask"][:, 1:],
-                #      torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)], dim=1)
-                # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-                # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-                # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-                # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-                # position_ids = torch.cat([position_ids[:, [0]], position_ids[:, 1:], label_position_ids], dim=1)
-                # inputs["position_ids"] = position_ids
-                # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-                # token_type_ids = torch.cat(
-                #     [inputs["token_type_ids"][:, [0]], inputs["token_type_ids"][:, 1:], label_type_ids], dim=1)
-                # inputs["token_type_ids"] = token_type_ids
-
                 outputs = model(**inputs)
-                # tmp_eval_loss, logits = outputs[:2]
-                tmp_eval_loss, logits = outputs[0], outputs[3]
+                tmp_eval_loss, logits = outputs[:2]
 
                 eval_loss += tmp_eval_loss.mean().item()
             nb_eval_steps += 1
@@ -478,7 +398,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if False: #not evaluate:
+    if False:#not evaluate:
         np.random.seed(2)
         num_data = len(features)
         ratio = 0.5
