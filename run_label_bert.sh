@@ -4,7 +4,7 @@ export TASK_NAME=MRPC
 export OUTPUT_DIR=./${TASK_NAME}_label_embedding
 # export log_file=tmp/train_log_${TASK_NAME}.txt
 
-python ./scripts/run_glue_label.py \
+python ./scripts/run_training_bert_label.py \
     --model_type bert \
     --model_name_or_path bert-base-uncased \
     --pretrained_model bert-base-uncased \
