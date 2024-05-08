@@ -26,7 +26,11 @@ def main():
 
     dataDf = pd.DataFrame(dataset)
 
-    
+    sample = 1000
+    col_name = "label"
+
+    probs = dataDf[col_name].map(dataDf[col_name].value_counts())
+    dataDf = dataDf.sample(n=sample, weights=probs)
 
     #print(dataDf.head())
     traindf, testdf = train_test_split(dataDf, test_size=0.2, random_state=42, shuffle=True)

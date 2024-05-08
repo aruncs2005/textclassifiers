@@ -16,7 +16,13 @@ def main():
     columns_titles = ["text","label"]
     trainData=trainData.reindex(columns=columns_titles)
 
-    print(trainData.head())
+
+    sample = 1500
+    col_name = "label"
+
+    probs = trainData[col_name].map(trainData[col_name].value_counts())
+    trainData = trainData.sample(n=sample, weights=probs)
+
     print(len(trainData.index))
     
     traindf, testdf = train_test_split(trainData, test_size=0.2, random_state=42, shuffle=True)

@@ -11,6 +11,13 @@ def main():
     print(len(data.index))
     columns_titles = ["text","label"]
     data=data.reindex(columns=columns_titles)
+
+    sample = 1500
+    col_name = "label"
+
+    probs = data[col_name].map(data[col_name].value_counts())
+    data = data.sample(n=sample, weights=probs)
+    print(f"Number of samples in train dataset {len(data.index)}")
     data.to_csv("../data/medabstracts/train.csv",index=False)
 
     # process test data
@@ -26,6 +33,13 @@ def main():
     print(len(data.index))
     columns_titles = ["text","label"]
     data=data.reindex(columns=columns_titles)
+
+    sample = 1500
+    col_name = "label"
+
+    probs = data[col_name].map(data[col_name].value_counts())
+    data = data.sample(n=sample, weights=probs)
+    print(f"Number of samples in test dataset {len(data.index)}")
     data.to_csv("../data/medabstracts/test.csv",index=False)
 
 
