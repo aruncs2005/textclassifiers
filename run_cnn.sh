@@ -4,16 +4,14 @@ export OUTPUT_DIR=./cnn_based_training
 # export log_file=tmp/train_log_${TASK_NAME}.txt
 
 python ./scripts/cnn_classification.py \
-    --max_seq_length 128 \
+    --max_seq_length 256 \
     --train_file data/medabstracts/train.csv \
     --validation_file data/medabstracts/test.csv \
     --per_gpu_eval_batch_size=32   \
     --per_gpu_train_batch_size=32   \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
-    --output_dir $OUTPUT_DIR \
-    --save_steps 10000 \
-    --logging_steps 10 \
+    --output_dir $OUTPUT_DIR
 # 2>&1 | tee -a $log_file
 # mv $log_file $OUTPUT_DIR 
 

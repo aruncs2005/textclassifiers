@@ -195,6 +195,13 @@ def main():
         "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
 
+    parser.add_argument(
+        "--learning_rate", default=2e-5, type=float, help="Learning rate used for training.",
+    )
+    parser.add_argument(
+        "--num_train_epochs", default=3, type=int, help="number of trianing epochs.",
+    )
+
     args = parser.parse_args()
 
     data_files = {}
