@@ -52,6 +52,8 @@ RUN pip install requests
 RUN pip install h5py
 RUN pip install scipy
 RUN pip install Pillow==6.1
+RUN pip install scikit-learn
+RUN pip install datasets
 
 WORKDIR /workspace
 
