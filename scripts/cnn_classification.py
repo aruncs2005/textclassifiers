@@ -199,7 +199,7 @@ def main():
         "--learning_rate", default=2e-5, type=float, help="Learning rate used for training.",
     )
     parser.add_argument(
-        "--num_train_epochs", default=3, type=int, help="number of trianing epochs.",
+        "--num_train_epochs", default=3.0, type=type=float, help="number of training epochs.",
     )
 
     args = parser.parse_args()
