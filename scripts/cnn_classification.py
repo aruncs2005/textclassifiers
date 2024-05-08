@@ -113,6 +113,13 @@ def get_accuracy(prediction, label):
     accuracy = correct_predictions / batch_size
     return accuracy
 
+def get_metrics(prediction,label, average="micro"):
+    batch_size, _ = prediction.shape
+    predicted_classes = prediction.argmax(dim=-1)
+    correct_predictions = predicted_classes.eq(label).sum()
+    accuracy = correct_predictions / batch_size
+    f1 = f1_score(label, predicted_classes, average=average)
+    return accuracy,f1
 
 def train(data_loader, model, criterion, optimizer, device):
     model.train()
@@ -124,11 +131,11 @@ def train(data_loader, model, criterion, optimizer, device):
         label = batch["labels"].to(device)
         prediction = model(ids)
         loss = criterion(prediction, label)
-        accuracy = get_accuracy(prediction, label)
+        accuracy,f1 = get_metrics(prediction.cpu(), label.cpu())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        f1 = f1_score(label, prediction, average='micro')
+        #f1 = f1_score(label, prediction, average='micro')
         epoch_losses.append(loss.item())
         epoch_accs.append(accuracy.item())
         epoch_f1.append(f1)
@@ -145,8 +152,9 @@ def evaluate(data_loader, model, criterion, device):
             label = batch["labels"].to(device)
             prediction = model(ids)
             loss = criterion(prediction, label)
-            accuracy = get_accuracy(prediction, label)
-            f1 = f1_score(label, prediction, average='micro')
+            accuracy,f1 = get_metrics(prediction.cpu(), label.cpu())
+            #accuracy = get_accuracy(prediction, label)
+            #f1 = f1_score(label, prediction, average='micro')
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
             epoch_f1.append(f1)
@@ -322,15 +330,17 @@ def main():
         metrics["train_losses"].append(train_loss)
         metrics["train_accs"].append(train_acc)
         metrics["train_f1"].append(train_f1)
+        metrics["train_acc_and_f1"].append((train_acc + train_f1)/2)
         metrics["valid_losses"].append(valid_loss)
         metrics["valid_accs"].append(valid_acc)
         metrics["val_f1"].append(val_f1)
+        metrics["val_acc_and_f1"].append((valid_acc + val_f1)/2)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
             torch.save(model.state_dict(), "cnn.pt")
         print(f"epoch: {epoch}")
-        print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}, train_f1: {train_f1:.3f}")
-        print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}, valid_f1: {val_f1:.3f}")
+        print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}, train_f1: {train_f1:.3f}, train_acc_and_f1: {(train_acc + train_f1)/2:.3f}")
+        print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}, valid_f1: {val_f1:.3f}, val_acc_and_f1: {(valid_acc + val_f1)/2:.3f}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ def remove_urls(text, replacement_text=""):
 
 def main():
     mapping = {"alzheimer":1,"parkinson":2,"cancer":3,"diabetes":4}
-    file = open("../data/illness/data.txt","r")
+    file = open("../data/illness/data.txt",encoding="utf-8")
 
     Lines = file.readlines()
     dataset = []
@@ -26,7 +26,9 @@ def main():
 
     dataDf = pd.DataFrame(dataset)
 
-    print(dataDf.head())
+    
+
+    #print(dataDf.head())
     traindf, testdf = train_test_split(dataDf, test_size=0.2, random_state=42, shuffle=True)
     print(f"Number of samples in train dataset {len(traindf.index)}")
     print(f"Number of samples in test dataset {len(testdf.index)}")

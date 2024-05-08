@@ -54,7 +54,7 @@ RUN pip install scipy
 RUN pip install Pillow==6.1
 RUN pip install scikit-learn
 RUN pip install datasets
-RUN pip install torchtext==0.7
+RUN pip install torchtext
 
 WORKDIR /workspace
 

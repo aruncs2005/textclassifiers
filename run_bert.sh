@@ -19,7 +19,7 @@ python ./scripts/run_training_bert.py \
     --per_gpu_eval_batch_size=32   \
     --per_gpu_train_batch_size=32   \
     --learning_rate 2e-5 \
-    --num_train_epochs 3.0 \
+    --num_train_epochs 10.0 \
     --output_dir $OUTPUT_DIR \
     --save_steps 10000 \
     --logging_steps 10 \
