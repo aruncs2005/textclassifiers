@@ -22,7 +22,7 @@ import json
 import logging
 import os
 import random
-
+from datasets import load_dataset
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
@@ -106,6 +106,73 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+
+def prepare_dataset(args,tokenizer,dataset,label_to_id):
+ 
+
+    def preprocess_function(examples):
+        # Tokenize the texts
+        inputs = tokenizer.encode_plus(examples["text"], add_special_tokens=True, max_length=args.max_seq_length)
+        input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
+        mask_padding_with_zero=True
+        pad_on_left=False
+        pad_token=0
+        pad_token_segment_id=0
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+
+        # Zero-pad up to the sequence length.
+        padding_length = args.max_seq_length - len(input_ids)
+        if pad_on_left:
+            input_ids = ([pad_token] * padding_length) + input_ids
+            attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
+            token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
+        else:
+            input_ids = input_ids + ([pad_token] * padding_length)
+            attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+            token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
+
+        #result = tokenizer(examples["text"], max_length=args.max_seq_length, truncation=True)
+        labels = [label_to_id[examples["label"]]]
+        # if "label" in examples:
+        #     if label_to_id is not None:
+        #         # Map labels to IDs (not necessary for GLUE tasks)
+        #         result["labels"] = [label_to_id[l] for l in examples["label"]]
+        #     else:
+        #         # In all cases, rename the column to labels because the model will expect that.
+        #         result["labels"] = examples["label"]
+        result = {}
+        result["input_ids"] = input_ids
+        result["attention_masks"] = attention_mask
+        result["token_type_ids"] = token_type_ids
+        result["labels"] = labels
+        #print(result)
+        return result
+    
+    processed_datasets = dataset.map(
+            preprocess_function,
+            batched=False,
+            remove_columns=dataset.column_names,
+            desc="Running tokenizer on dataset",
+        )
+    traindataset = processed_datasets
+    input_ids = []
+    attn_masks = []
+    token_type_ids = []
+    labels = []
+    for item in traindataset:
+        input_ids.append(item["input_ids"])
+        attn_masks.append(item["attention_masks"])
+        token_type_ids.append(item["token_type_ids"])
+        labels.append(item["labels"])
+    all_input_ids = torch.tensor(input_ids, dtype=torch.long)
+    all_attention_mask = torch.tensor(attn_masks, dtype=torch.long)
+    all_token_types = torch.tensor(token_type_ids, dtype=torch.long)
+    all_labels = torch.tensor(labels, dtype=torch.long)
+    train_ds = TensorDataset(all_input_ids, all_attention_mask,all_token_types, all_labels)
+
+    return train_ds
 
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
@@ -207,8 +274,11 @@ def train(args, train_dataset, model, tokenizer):
                 continue
 
             model.train()
+         
             batch = tuple(t.to(args.device) for t in batch)
+
             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+      
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = (
                     batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
@@ -328,112 +398,72 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, prefix=""):
+def evaluate(args, model, tokenizer, eval_dataset,label_to_id):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
-    eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
-    eval_outputs_dirs = (args.output_dir, args.output_dir + "-MM") if args.task_name == "mnli" else (args.output_dir,)
-
+    eval_output_dir = args.output_dir
     results = {}
-    for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
 
-        if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(eval_output_dir)
+    eval_dataset = prepare_dataset(args,tokenizer,eval_dataset,label_to_id)
 
-        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-        # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+
+    if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(eval_output_dir)
+
+    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(eval_dataset)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         # multi-gpu eval
-        if args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
+    if args.n_gpu > 1:
+        model = torch.nn.DataParallel(model)
 
-        # Eval!
-        logger.info("***** Running evaluation {} *****".format(prefix))
-        logger.info("  Num examples = %d", len(eval_dataset))
-        logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_loss = 0.0
-        nb_eval_steps = 0
-        preds = None
-        out_label_ids = None
-        for batch in tqdm(eval_dataloader, desc="Evaluating"):
-            model.eval()
-            batch = tuple(t.to(args.device) for t in batch)
+    # Eval!
+    logger.info("***** Running evaluation *****")
+    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
+    eval_loss = 0.0
+    nb_eval_steps = 0
+    preds = None
+    out_label_ids = None
+    for batch in tqdm(eval_dataloader, desc="Evaluating"):
+        model.eval()
+        batch = tuple(t.to(args.device) for t in batch)
 
-            with torch.no_grad():
-                inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-                if args.model_type != "distilbert":
-                    inputs["token_type_ids"] = (
+        with torch.no_grad():
+            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+            if args.model_type != "distilbert":
+                inputs["token_type_ids"] = (
                         batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
                     )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
 
-                # batch_size, seq_len = inputs["input_ids"].size()
-                # inputs["input_ids"] = torch.cat([inputs["input_ids"][:, :2],
-                #                                  torch.zeros(batch_size, 2, dtype=torch.long,
-                #                                              device=args.device) + tokenizer.convert_tokens_to_ids(
-                #                                      tokenizer.pad_token)
-                #                                     , inputs["input_ids"][:, 2:]], dim=1)
-                # inputs["attention_mask"] = torch.cat(
-                #     [inputs["attention_mask"][:, :2], torch.zeros(batch_size, 2, dtype=torch.long, device=args.device),
-                #      inputs["attention_mask"][:, 2:]], dim=1)
-                # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-                # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-                # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-                # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-                # position_ids = torch.cat([position_ids[:, :2], label_position_ids, position_ids[:, 2:]], dim=1)
-                # inputs["position_ids"] = position_ids
-                # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-                # token_type_ids = torch.cat(
-                #     [inputs["token_type_ids"][:, :2], label_type_ids, inputs["token_type_ids"][:, 2:]], dim=1)
-                # inputs["token_type_ids"] = token_type_ids
 
-                # batch_size, seq_len = inputs["input_ids"].size()
-                # inputs["input_ids"] = torch.cat([inputs["input_ids"][:, [0]], inputs["input_ids"][:, 1:],
-                #                                  torch.zeros(batch_size, 2, dtype=torch.long,
-                #                                              device=args.device) + tokenizer.convert_tokens_to_ids(
-                #                                      tokenizer.pad_token)], dim=1)
-                # inputs["attention_mask"] = torch.cat(
-                #     [inputs["attention_mask"][:, [0]], inputs["attention_mask"][:, 1:],
-                #      torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)], dim=1)
-                # position_ids = torch.arange(seq_len, dtype=torch.long, device=args.device)
-                # position_ids = position_ids.unsqueeze(0).expand((batch_size, seq_len))
-                # label_position_ids = torch.zeros(2, dtype=torch.long, device=args.device)
-                # label_position_ids = label_position_ids.unsqueeze(0).expand((batch_size, 2))
-                # position_ids = torch.cat([position_ids[:, [0]], position_ids[:, 1:], label_position_ids], dim=1)
-                # inputs["position_ids"] = position_ids
-                # label_type_ids = torch.zeros(batch_size, 2, dtype=torch.long, device=args.device)
-                # token_type_ids = torch.cat(
-                #     [inputs["token_type_ids"][:, [0]], inputs["token_type_ids"][:, 1:], label_type_ids], dim=1)
-                # inputs["token_type_ids"] = token_type_ids
+            outputs = model(**inputs)
+            # tmp_eval_loss, logits = outputs[:2]
+            tmp_eval_loss, logits = outputs[0], outputs[3]
 
-                outputs = model(**inputs)
-                # tmp_eval_loss, logits = outputs[:2]
-                tmp_eval_loss, logits = outputs[0], outputs[3]
+            eval_loss += tmp_eval_loss.mean().item()
+        nb_eval_steps += 1
+        if preds is None:
+            preds = logits.detach().cpu().numpy()
+            out_label_ids = inputs["labels"].detach().cpu().numpy()
+        else:
+            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+            out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
-                eval_loss += tmp_eval_loss.mean().item()
-            nb_eval_steps += 1
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-                out_label_ids = inputs["labels"].detach().cpu().numpy()
-            else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+    eval_loss = eval_loss / nb_eval_steps
+    preds = np.argmax(preds, axis=1)
 
-        eval_loss = eval_loss / nb_eval_steps
-        if args.output_mode == "classification":
-            preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
-        result = compute_metrics(eval_task, preds, out_label_ids)
-        results.update(result)
+    result = compute_metrics("sst-2", preds, out_label_ids)
+    results.update(result)
 
-        output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results {} *****".format(prefix))
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+    output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
+    with open(output_eval_file, "w") as writer:
+        logger.info("***** Eval results *****")
+        for key in sorted(result.keys()):
+            logger.info("  %s = %s", key, str(result[key]))
+            writer.write("%s = %s\n" % (key, str(result[key])))
 
     return results
 
@@ -515,6 +545,23 @@ def main():
         required=True,
         help="The input data dir. Should contain the .tsv files (or other data files) for the task.",
     )
+
+    parser.add_argument(
+        "--train_file",
+        default=None,
+        type=str,
+        required=True,
+        help="The input data dir. Should contain the .tsv files (or other data files) for the task.",
+    )
+
+    parser.add_argument(
+        "--validation_file",
+        default=None,
+        type=str,
+        required=True,
+        help="The input data dir. Should contain the .tsv files (or other data files) for the task.",
+    )
+
     parser.add_argument(
         "--model_type",
         default=None,
@@ -562,7 +609,7 @@ def main():
     )
     parser.add_argument(
         "--max_seq_length",
-        default=128,
+        default=256,
         type=int,
         help="The maximum total input sequence length after tokenization. Sequences longer "
         "than this will be truncated, sequences shorter will be padded.",
@@ -687,14 +734,28 @@ def main():
     # Set seed
     set_seed(args)
 
-    # Prepare GLUE task
-    args.task_name = args.task_name.lower()
-    if args.task_name not in processors:
-        raise ValueError("Task not found: %s" % (args.task_name))
-    processor = processors[args.task_name]()
-    args.output_mode = output_modes[args.task_name]
-    label_list = processor.get_labels()
+    # # Prepare GLUE task
+    data_files = {}
+    if args.train_file is not None:
+        data_files["train"] = args.train_file
+    if args.validation_file is not None:
+        data_files["validation"] = args.validation_file
+    extension = (args.train_file if args.train_file is not None else args.validation_file).split(".")[-1]
+    raw_datasets = load_dataset(extension, data_files=data_files)
+
+    label_list = raw_datasets["train"].unique("label")
+    label_list.sort()  # Let's sort it for determinism
     num_labels = len(label_list)
+    print(f"*************labels {label_list} **********")
+    label_to_id = {v: i for i, v in enumerate(label_list)}
+
+    # args.task_name = args.task_name.lower()
+    # if args.task_name not in processors:
+    #     raise ValueError("Task not found: %s" % (args.task_name))
+    # processor = processors[args.task_name]()
+    # args.output_mode = output_modes[args.task_name]
+    # label_list = processor.get_labels()
+    # num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     if args.local_rank not in [-1, 0]:
@@ -732,7 +793,9 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        train_dataset = prepare_dataset(args,tokenizer,raw_datasets["train"],label_to_id)
+
+        #train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
@@ -776,7 +839,8 @@ def main():
 
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=prefix)
+            result = evaluate(args, model, tokenizer, raw_datasets["validation"],label_to_id)
+            #result = evaluate(args, model, tokenizer, prefix=prefix)
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
             results.update(result)
 
