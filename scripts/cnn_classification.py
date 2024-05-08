@@ -9,7 +9,7 @@ import torch.optim as optim
 import torchtext
 import tqdm
 import argparse
-
+from sklearn.metrics import f1_score
 seed = 1234
 
 np.random.seed(seed)
@@ -135,6 +135,7 @@ def evaluate(data_loader, model, criterion, device):
     model.eval()
     epoch_losses = []
     epoch_accs = []
+    epoch_f1 = []
     with torch.no_grad():
         for batch in tqdm.tqdm(data_loader, desc="evaluating..."):
             ids = batch["ids"].to(device)
@@ -142,9 +143,12 @@ def evaluate(data_loader, model, criterion, device):
             prediction = model(ids)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
+            f1_score = f1_score(label, prediction, average='micro')
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-    return np.mean(epoch_losses), np.mean(epoch_accs)
+            epoch_f1.append(f1_score)
+
+    return np.mean(epoch_losses), np.mean(epoch_accs), np.mean(epoch_f1)
 
 
 def main():
@@ -301,20 +305,22 @@ def main():
     metrics = collections.defaultdict(list)
 
     for epoch in range(n_epochs):
-        train_loss, train_acc = train(
+        train_loss, train_acc, train_f1 = train(
             train_data_loader, model, criterion, optimizer, device
         )
-        valid_loss, valid_acc = evaluate(valid_data_loader, model, criterion, device)
+        valid_loss, valid_acc, val_f1 = evaluate(valid_data_loader, model, criterion, device)
         metrics["train_losses"].append(train_loss)
         metrics["train_accs"].append(train_acc)
+        metrics["train_f1"].append(train_f1)
         metrics["valid_losses"].append(valid_loss)
         metrics["valid_accs"].append(valid_acc)
+        metrics["val_f1"].append(val_f1)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
             torch.save(model.state_dict(), "cnn.pt")
         print(f"epoch: {epoch}")
-        print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}")
-        print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}")
+        print(f"train_loss: {train_loss:.3f}, train_acc: {train_acc:.3f}, train_f1: {train_f1:.3f}")
+        print(f"valid_loss: {valid_loss:.3f}, valid_acc: {valid_acc:.3f}, valid_f1: {val_f1:.3f}")
 
 
 if __name__ == "__main__":
