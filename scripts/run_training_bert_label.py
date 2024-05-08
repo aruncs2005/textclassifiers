@@ -455,7 +455,7 @@ def evaluate(args, model, tokenizer, eval_dataset,label_to_id):
     eval_loss = eval_loss / nb_eval_steps
     preds = np.argmax(preds, axis=1)
 
-    result = compute_metrics("sst-2", preds, out_label_ids)
+    result = compute_metrics("mrpc", preds, out_label_ids)
     results.update(result)
 
     output_eval_file = os.path.join(eval_output_dir, "eval_results.txt")
