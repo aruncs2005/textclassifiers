@@ -11,7 +11,7 @@ def main():
     print(len(data.index))
     columns_titles = ["text","label"]
     data=data.reindex(columns=columns_titles)
-    data.to_csv("../data/medabstracts/train.tsv",index=False,sep="\t")
+    data.to_csv("../data/medabstracts/train.csv",index=False)
 
     # process test data
 
@@ -26,7 +26,7 @@ def main():
     print(len(data.index))
     columns_titles = ["text","label"]
     data=data.reindex(columns=columns_titles)
-    data.to_csv("../data/medabstracts/test.tsv",index=False,sep="\t")
+    data.to_csv("../data/medabstracts/test.csv",index=False)
 
 
 if __name__ == "__main__":
