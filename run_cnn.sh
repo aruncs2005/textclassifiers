@@ -5,8 +5,8 @@ export OUTPUT_DIR=./cnn_based_training
 
 python ./scripts/cnn_classification.py \
     --max_seq_length 128 \
-    --train_file glue_data/medabstracts/train.csv \
-    --validation_file glue_data/medabstracts/test.csv \
+    --train_file data/medabstracts/train.csv \
+    --validation_file data/medabstracts/test.csv \
     --per_gpu_eval_batch_size=32   \
     --per_gpu_train_batch_size=32   \
     --learning_rate 2e-5 \
