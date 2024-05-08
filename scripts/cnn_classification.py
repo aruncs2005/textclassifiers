@@ -1,7 +1,7 @@
 import collections
 
 import datasets
-import matplotlib.pyplot as plt
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -118,6 +118,7 @@ def train(data_loader, model, criterion, optimizer, device):
     model.train()
     epoch_losses = []
     epoch_accs = []
+    epoch_f1 = []
     for batch in tqdm.tqdm(data_loader, desc="training..."):
         ids = batch["ids"].to(device)
         label = batch["labels"].to(device)
@@ -127,9 +128,11 @@ def train(data_loader, model, criterion, optimizer, device):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        f1 = f1_score(label, prediction, average='micro')
         epoch_losses.append(loss.item())
         epoch_accs.append(accuracy.item())
-    return np.mean(epoch_losses), np.mean(epoch_accs)
+        epoch_f1.append(f1)
+    return np.mean(epoch_losses), np.mean(epoch_accs), np.mean(epoch_f1)
 
 def evaluate(data_loader, model, criterion, device):
     model.eval()
@@ -143,10 +146,10 @@ def evaluate(data_loader, model, criterion, device):
             prediction = model(ids)
             loss = criterion(prediction, label)
             accuracy = get_accuracy(prediction, label)
-            f1_score = f1_score(label, prediction, average='micro')
+            f1 = f1_score(label, prediction, average='micro')
             epoch_losses.append(loss.item())
             epoch_accs.append(accuracy.item())
-            epoch_f1.append(f1_score)
+            epoch_f1.append(f1)
 
     return np.mean(epoch_losses), np.mean(epoch_accs), np.mean(epoch_f1)
 
