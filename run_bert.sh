@@ -9,6 +9,8 @@ python ./scripts/run_training_bert.py \
     --model_name_or_path bert-base-uncased \
     --pretrained_model bert-base-uncased \
     --task_name $TASK_NAME \
+    --train_file glue_data/medabstracts/train.csv \
+    --validation_file glue_data/medabstracts/test.csv \
     --do_train \
     --do_eval \
     --do_lower_case \
